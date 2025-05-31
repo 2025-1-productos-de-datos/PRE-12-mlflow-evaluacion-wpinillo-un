@@ -1,6 +1,4 @@
 ## Se importa MLflow
-import uuid
-
 import mlflow
 
 from ._internals.calculate_metrics import calculate_metrics
@@ -27,9 +25,8 @@ def main():
     )
 
     ## Se inicia un experimento en MLflow
-    mlflow.set_experiment("wine_quality_experiment")
-    run_name = f"{args.model}_{uuid.uuid4().hex[:8]}"
-    with mlflow.start_run(run_name=run_name):
+    print("Tracking directory:", mlflow.get_tracking_uri())
+    with mlflow.start_run():
 
         ## Log de los parametros generales y del tipo de modelo
         mlflow.log_param("file_path", FILE_PATH)
@@ -46,29 +43,37 @@ def main():
 
         model.fit(x_train, y_train)
 
+        ## Metricas de entrenamiento
         mse, mae, r2 = calculate_metrics(model, x_train, y_train)
         print_metrics("Training metrics", mse, mae, r2)
 
-        ## Log de las metricas de entrenamiento
         mlflow.log_metric("train_mse", mse)
         mlflow.log_metric("train_mae", mae)
         mlflow.log_metric("train_r2", r2)
 
+        ## Metricas de prueba
         mse, mae, r2 = calculate_metrics(model, x_test, y_test)
         print_metrics("Testing metrics", mse, mae, r2)
 
-        ## Log de las metricas de test
         mlflow.log_metric("test_mse", mse)
         mlflow.log_metric("test_mae", mae)
         mlflow.log_metric("test_r2", r2)
 
-        ## Ya no se requiere la funcion save_model_if_better,
-        ## ya que el modelo se guarda en el experimento de MLflow
-        # save_model_if_better(model, x_test, y_test)
-        mlflow.sklearn.log_model(
+        ## ------------------- EVALUACION DEL MODELO -------------------
+        model_info = mlflow.sklearn.log_model(
             sk_model=model,
             artifact_path="model",
             input_example=x_train[:1],
+        )
+
+        eval_data = x_test
+        eval_data["quality"] = y_test
+
+        mlflow.evaluate(
+            model_info.model_uri,
+            eval_data,
+            targets="quality",
+            model_type="regressor",  # "regressor" | "classifier"
         )
 
 
